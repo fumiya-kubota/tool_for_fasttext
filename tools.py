@@ -3,8 +3,13 @@ from scipy import linalg, mat, dot
 from datetime import datetime
 import numpy as np
 import time
+from multiprocessing import Pool, cpu_count
+import os
+import shutil
+import glob
 
-def similarity(v1, v2):
+
+def calc_similarity(v1, v2):
     return dot(v1, v2) / linalg.norm(v1) / linalg.norm(v2)
 
 
@@ -13,35 +18,70 @@ def cmd():
     pass
 
 
+def make_preparation_dir(vec_file, vocab_file, dir_name):
+    if os.path.exists(dir_name):
+        shutil.rmtree(dir_name)
+    os.makedirs(dir_name)
+
+    vec_fps = [open(os.path.join(dir_name, '{}.vec'.format(idx)), 'w') for idx in range(1, cpu_count() + 1)]
+    for idx, row in enumerate(open(vec_file)):
+        fp = vec_fps[idx % len(vec_fps)]
+        fp.write('{}'.format(row))
+
+
+def vec_dictionary_from_file_path(file_path):
+    print(file_path, 'start')
+    a = {row[0]: np.array(row[1:], dtype=float) for row in (row.strip().split() for row in open(file_path))}
+    print(file_path, 'end')
+    return a
+
+
+
+class VecDirDict:
+    def __init__(self, dir_name):
+        super().__init__()
+        self.dir_name = dir_name
+        self.dicts = Pool().map(
+            vec_dictionary_from_file_path,
+            (os.path.join(self.dir_name, x) for x in glob.glob1(self.dir_name, '*.vec'))
+        )
+
+    def get(self, key):
+        for dictionary in self.dicts:
+            if key in dictionary:
+                return dictionary[key]
+        return None
+
+
+def near_similarity_tokens(file_path, vec, cmp_func, border):
+    for token, matrix in iter_vec_value(file_path):
+        if vec.shape == matrix.shape:
+            similarity = cmp_func(vec, matrix)
+            if similarity >= border:
+                yield token, similarity
+
+
+@cmd.command()
+@click.argument('vec_path', type=click.STRING)
+@click.argument('dir_name', type=click.STRING)
+def prepare(vec_path, vocab_path, dir_name):
+    if os.path.exists(dir_name):
+        shutil.rmtree(dir_name)
+    make_preparation_dir(vec_path, vocab_path, dir_name)
+
+
 @cmd.command()
 @click.argument('vocab', type=click.STRING)
-@click.argument('vec_path', type=click.STRING)
 @click.argument('vocab_path', type=click.STRING)
-def distance(vocab, vec_path, vocab_path):
-    token1 = vocab2token('宗教', vocab_path)
-    token2 = vocab2token('戦争', vocab_path)
-    # token3 = vocab2token('性欲', vocab_path)
-    token2vec = {}
-    token2vocab = {}
-    with open(vocab_path) as fp:
-        for idx, row in enumerate(map(lambda x: x.strip(), fp)):
-            token2vocab[str(idx)] = row
-    print('----token2vocab')
-    with open(vec_path) as fp:
-        now = datetime.now()
-        for idx, row in enumerate(map(lambda x: x.strip().split(), fp)):
-            vec = np.array(row[1:], dtype=float)
-            token2vec[row[0]] = vec
-        print(datetime.now() - now)
-    print('---token2vec')
-    vec = token2vec[token1] - token2vec[token2]
-    for t, v in token2vec.items():
-        if not vec.shape == v.shape:
-            print('continue')
-            continue
-        s = similarity(vec, v)
-        if s > 0.6:
-            print(vocab, token2vocab[t], s)
+@click.argument('preparation_dir', type=click.STRING)
+def distance(vocab, vocab_path, preparation_dir):
+    assert os.path.exists(preparation_dir)
+    token = vocab2token(vocab, vocab_path)
+    click.echo(token)
+    now = datetime.now()
+    vec_dict = VecDirDict(preparation_dir)
+    print(vec_dict.get(token))
+    print(datetime.now() - now)
 
 
 def vocab2token(vocab, path):
@@ -49,7 +89,6 @@ def vocab2token(vocab, path):
     with open(path) as fp:
         for idx, row in enumerate(map(lambda x: x.strip(), fp)):
             if vocab == row:
-                click.echo(idx)
                 return str(idx)
     return None
 
