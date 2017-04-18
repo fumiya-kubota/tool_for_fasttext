@@ -73,6 +73,17 @@ def prepare(vec_path, dir_name):
 
 
 @cmd.command()
+@click.argument('vec_path', type=click.STRING)
+@click.argument('dist_vec', type=click.STRING)
+def prepare_for_ngt(vec_path, dist_vec):
+    dist = open(dist_vec, 'w')
+    vec_file = open(vec_path)
+    vec_file.readline()
+    for key, row in (row.strip().split(maxsplit=1) for row in vec_file):
+        dist.write('{} {}\n'.format(row, key))
+
+
+@cmd.command()
 @click.argument('vocab', type=click.STRING)
 @click.argument('vocab_path', type=click.STRING)
 @click.argument('preparation_dir', type=click.STRING, default='preparation_dir')
