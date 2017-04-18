@@ -80,6 +80,10 @@ def prepare_for_ngt(vec_path, dist_vec):
     vec_file = open(vec_path)
     vec_file.readline()
     for key, row in (row.strip().split(maxsplit=1) for row in vec_file):
+        vec = np.array(row.split(), dtype='float32')
+        vec /= np.linalg.norm(vec)
+        row = list(vec)
+        row = ' '.join(map(str, row))
         dist.write('{} {}\n'.format(row, key))
 
 
@@ -130,7 +134,42 @@ def tokens2vocab(tokens, path):
 
 
 @cmd.command()
-@click.argument('token', type=click.INT)
+@click.argument('vocab', type=click.STRING)
+@click.argument('path', type=click.Path(exists=True, file_okay=True, dir_okay=False))
+def v2t(vocab, path):
+    click.echo(vocab2token(vocab, path))
+
+
+@cmd.command()
+@click.argument('vocab', type=click.STRING)
+@click.argument('vocab_path', type=click.Path(exists=True, file_okay=True, dir_okay=False))
+@click.argument('vec_path', type=click.Path(exists=True, file_okay=True, dir_okay=False))
+def v2v(vocab, vocab_path, vec_path):
+    token = vocab2token(vocab, vocab_path)
+    click.echo(token)
+    vec_file = open(vec_path)
+    vec_file.readline()
+    for vec, key in (row.strip().rsplit(maxsplit=1) for row in vec_file):
+        if token == key:
+            print(key, vec)
+            return
+
+
+@cmd.command()
+@click.argument('vocab', type=click.STRING)
+@click.argument('path', type=click.Path(exists=True, file_okay=True, dir_okay=False))
+def vocab2vec(vocab, path):
+    token2vocab(vocab)
+    print(vocab, path)
+    with open(path) as fp:
+        for idx, row in enumerate(map(lambda x: x.strip(), fp)):
+            if vocab == row:
+                return str(idx)
+    return None
+
+
+@cmd.command()
+@click.argument('token', type=click.STRING)
 @click.argument('path', type=click.Path(exists=True, file_okay=True, dir_okay=False))
 def token2vocab(token, path):
     print(token, path)
